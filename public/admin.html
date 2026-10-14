@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+    <div id="loginScreen" class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+            <h1 class="text-2xl font-bold mb-6 text-center text-blue-600">Admin Login</h1>
+            <input type="password" id="adminPassword" placeholder="Enter Admin Password" class="w-full p-3 border rounded mb-4">
+            <button onclick="login()" class="w-full bg-blue-600 text-white p-3 rounded hover:bg-blue-700">Login</button>
+            <p id="loginError" class="text-red-500 text-sm mt-3 hidden text-center"></p>
+        </div>
+    </div>
+    <div id="dashboard" class="hidden">
+        <nav class="bg-blue-600 text-white p-4 shadow-md">
+            <div class="max-w-7xl mx-auto flex justify-between items-center">
+                <h1 class="text-xl font-bold">Admin Dashboard</h1>
+                <button onclick="logout()" class="text-sm bg-blue-700 px-4 py-2 rounded">Logout</button>
+            </div>
+        </nav>
+        <main class="max-w-7xl mx-auto p-6">
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-lg font-semibold mb-4">Add New Reseller</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                    <input type="text" id="newName" placeholder="Reseller Name *" class="p-2 border rounded">
+                    <input type="number" id="newTgBotId" placeholder="TG Bot ID (id3)" class="p-2 border rounded">
+                    <input type="number" id="newTgBotStartId" placeholder="TG Bot Start ID (id11)" class="p-2 border rounded">
+                    <input type="number" id="newTgChannelId" placeholder="TG Channel ID (id1)" class="p-2 border rounded">
+                    <input type="number" id="newTgChannelLargeId" placeholder="TG Channel >100k (id4)" class="p-2 border rounded">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                    <input type="number" id="newTgGroupId" placeholder="TG Group ID (id42)" class="p-2 border rounded">
+                    <input type="number" id="newTgPostId" placeholder="TG Post ID (id41)" class="p-2 border rounded">
+                    <input type="number" id="newMaxChannelId" placeholder="MAX Channel ID (id20)" class="p-2 border rounded">
+                    <input type="number" id="newMaxPostId" placeholder="MAX Post ID (id21)" class="p-2 border rounded">
+                    <button onclick="addReseller()" class="bg-green-600 text-white p-2 rounded hover:bg-green-700 font-semibold">Add Reseller</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-100 text-gray-600 text-xs uppercase">
+                            <tr>
+                                <th class="p-4">Name</th><th class="p-4">TG Bot</th><th class="p-4">TG Bot Start</th><th class="p-4">TG Channel</th><th class="p-4">TG Channel >100k</th>
+                                <th class="p-4">TG Group</th><th class="p-4">TG Post</th><th class="p-4">MAX Channel</th><th class="p-4">MAX Post</th><th class="p-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resellersTableBody" class="divide-y text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <div id="snippetModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+            <h2 class="text-xl font-bold mb-4">Installation Snippet</h2>
+            <textarea id="snippetCode" readonly class="w-full h-32 p-3 bg-gray-100 border rounded font-mono text-sm mb-4"></textarea>
+            <div class="flex justify-end gap-3">
+                <button onclick="document.getElementById('snippetModal').classList.add('hidden')" class="px-4 py-2 border rounded">Close</button>
+                <button onclick="navigator.clipboard.writeText(document.getElementById('snippetCode').value); alert('Copied!')" class="px-4 py-2 bg-blue-600 text-white rounded">Copy</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let token = localStorage.getItem('adminToken');
+        if (token) showDashboard();
+        async function login() {
+            const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: document.getElementById('adminPassword').value }) });
+            const data = await res.json();
+            if (res.ok) { localStorage.setItem('adminToken', data.token); token = data.token; showDashboard(); }
+            else { document.getElementById('loginError').textContent = data.error; document.getElementById('loginError').classList.remove('hidden'); }
+        }
+        function logout() { localStorage.removeItem('adminToken'); location.reload(); }
+        function showDashboard() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            loadResellers();
+        }
+        async function loadResellers() {
+            const res = await fetch('/api/resellers', { headers: { 'Authorization': 'Bearer ' + token } });
+            if (!res.ok) return logout();
+            const rows = await res.json();
+            document.getElementById('resellersTableBody').innerHTML = rows.map(r => `
+                <tr class="hover:bg-gray-50">
+                    <td class="p-4 font-medium">${r.name}</td>
+                    <td class="p-4">${r.tg_bot_id || '-'}</td>
+                    <td class="p-4">${r.tg_bot_start_id || '-'}</td>
+                    <td class="p-4">${r.tg_channel_id || '-'}</td>
+                    <td class="p-4">${r.tg_channel_large_id || '-'}</td>
+                    <td class="p-4">${r.tg_group_id || '-'}</td>
+                    <td class="p-4">${r.tg_post_id || '-'}</td>
+                    <td class="p-4">${r.max_channel_id || '-'}</td>
+                    <td class="p-4">${r.max_post_id || '-'}</td>
+                    <td class="p-4 flex gap-3">
+                        <button onclick="showSnippet('${r.public_key}')" class="text-blue-600 hover:underline">Snippet</button>
+                        <button onclick="deleteReseller(${r.id})" class="text-red-600 hover:underline">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        async function addReseller() {
+            const data = { 
+                name: document.getElementById('newName').value,
+                tg_bot_id: document.getElementById('newTgBotId').value || null,
+                tg_bot_start_id: document.getElementById('newTgBotStartId').value || null,
+                tg_channel_id: document.getElementById('newTgChannelId').value || null,
+                tg_channel_large_id: document.getElementById('newTgChannelLargeId').value || null,
+                tg_group_id: document.getElementById('newTgGroupId').value || null,
+                tg_post_id: document.getElementById('newTgPostId').value || null,
+                max_channel_id: document.getElementById('newMaxChannelId').value || null,
+                max_post_id: document.getElementById('newMaxPostId').value || null
+            };
+            if (!data.name) return alert('Name is required');
+            await fetch('/api/resellers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify(data) });
+            ['newName','newTgBotId','newTgBotStartId','newTgChannelId','newTgChannelLargeId','newTgGroupId','newTgPostId','newMaxChannelId','newMaxPostId'].forEach(id => document.getElementById(id).value = '');
+            loadResellers();
+        }
+        async function deleteReseller(id) {
+            if (!confirm('Delete this reseller?')) return;
+            await fetch('/api/resellers/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+            loadResellers();
+        }
+        function showSnippet(key) {
+            document.getElementById('snippetCode').value = `<script\n  src="${window.location.origin}/widget.js"\n  data-widget-key="${key}"\n><\/script>`;
+            document.getElementById('snippetModal').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
