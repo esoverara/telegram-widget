@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
@@ -12,21 +12,28 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const db = new sqlite3.Database('./database.sqlite', (err) => {
-    if (err) console.error('DB error:', err);
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL?.includes('neon.tech') ? { rejectUnauthorized: false } : false
 });
 
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS resellers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+pool.query(`
+    CREATE TABLE IF NOT EXISTS resellers (
+        id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         public_key TEXT UNIQUE NOT NULL,
-        tg_bot_id INTEGER, tg_bot_start_id INTEGER, tg_channel_id INTEGER,
-        tg_channel_large_id INTEGER, tg_group_id INTEGER, tg_post_id INTEGER,
-        max_channel_id INTEGER, max_post_id INTEGER,
+        tg_bot_id INTEGER,
+        tg_bot_start_id INTEGER,
+        tg_channel_id INTEGER,
+        tg_channel_large_id INTEGER,
+        tg_group_id INTEGER,
+        tg_post_id INTEGER,
+        max_channel_id INTEGER,
+        max_post_id INTEGER,
         is_active INTEGER DEFAULT 1
-    )`);
-});
+    )
+`).then(() => console.log('✅ Database connected'))
+  .catch(err => console.error('DB error:', err));
 
 function generateKey() {
     return 'pk_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -53,10 +60,12 @@ async function detectType(target, quantity) {
 }
 
 app.get('/api/config', (req, res) => {
-    db.get('SELECT * FROM resellers WHERE public_key = ?', [req.query.key], (err, row) => {
-        if (!row || !row.is_active) return res.status(404).json({ error: 'Invalid' });
-        res.json(row);
-    });
+    pool.query('SELECT * FROM resellers WHERE public_key = $1 AND is_active = 1', [req.query.key])
+        .then(result => {
+            if (result.rows.length === 0) return res.status(404).json({ error: 'Invalid' });
+            res.json(result.rows[0]);
+        })
+        .catch(err => res.status(500).json({ error: 'DB error' }));
 });
 
 app.post('/api/detect', async (req, res) => {
@@ -71,15 +80,26 @@ app.post('/api/login', (req, res) => {
 
 const requireAdmin = (req, res, next) => req.headers['authorization']?.split(' ')[1] === ADMIN_TOKEN ? next() : res.status(401).json({ error: 'No' });
 
-app.get('/api/resellers', requireAdmin, (req, res) => db.all('SELECT * FROM resellers ORDER BY id DESC', (err, rows) => res.json(rows || [])));
+app.get('/api/resellers', requireAdmin, (req, res) => {
+    pool.query('SELECT * FROM resellers ORDER BY id DESC')
+        .then(result => res.json(result.rows))
+        .catch(err => res.status(500).json({ error: 'DB error' }));
+});
 
 app.post('/api/resellers', requireAdmin, (req, res) => {
     const k = generateKey();
-    db.run(`INSERT INTO resellers (name, public_key, tg_bot_id, tg_bot_start_id, tg_channel_id, tg_channel_large_id, tg_group_id, tg_post_id, max_channel_id, max_post_id, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        [req.body.name, k, req.body.tg_bot_id, req.body.tg_bot_start_id, req.body.tg_channel_id, req.body.tg_channel_large_id, req.body.tg_group_id, req.body.tg_post_id, req.body.max_channel_id, req.body.max_post_id, 1], 
-        function() { res.json({ key: k }); });
+    pool.query(`
+        INSERT INTO resellers (name, public_key, tg_bot_id, tg_bot_start_id, tg_channel_id, tg_channel_large_id, tg_group_id, tg_post_id, max_channel_id, max_post_id, is_active) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [req.body.name, k, req.body.tg_bot_id, req.body.tg_bot_start_id, req.body.tg_channel_id, req.body.tg_channel_large_id, req.body.tg_group_id, req.body.tg_post_id, req.body.max_channel_id, req.body.max_post_id, 1])
+        .then(() => res.json({ key: k }))
+        .catch(err => res.status(500).json({ error: 'DB error' }));
 });
 
-app.delete('/api/resellers/:id', requireAdmin, (req, res) => db.run(`DELETE FROM resellers WHERE id=?`, [req.params.id], () => res.json({ ok: true })));
+app.delete('/api/resellers/:id', requireAdmin, (req, res) => {
+    pool.query('DELETE FROM resellers WHERE id = $1', [req.params.id])
+        .then(() => res.json({ ok: true }))
+        .catch(err => res.status(500).json({ error: 'DB error' }));
+});
 
 app.listen(PORT, () => console.log('✅ Server running'));
