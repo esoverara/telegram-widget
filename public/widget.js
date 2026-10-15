@@ -8,19 +8,28 @@
         return;
     }
 
-    // Create a simple floating button that opens the tool in a new tab
+    // Create container for the floating button
     const container = document.createElement('div');
     container.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:999999;';
     
+    // Create the link that opens the tool
     const button = document.createElement('a');
     button.href = apiBaseUrl + '/tool.html?key=' + widgetKey;
     button.target = '_blank';
     button.rel = 'noreferrer';
-    button.style.cssText = 'display:inline-block;background:#0088cc;color:white;text-decoration:none;border-radius:50px;padding:12px 24px;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:background 0.2s;';
-    button.innerHTML = '💬 Telegram Order Assistant';
-    button.onmouseover = function() { this.style.background = '#0077b5'; };
-    button.onmouseout = function() { this.style.background = '#0088cc'; };
+    button.style.cssText = 'display:inline-block;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;';
     
-    container.appendChild(button);
-    document.body.appendChild(container);
-})();
+    // Create the image element
+    const img = document.createElement('img');
+    img.src = apiBaseUrl + '/widget-icon.png';
+    img.alt = 'Telegram Order Assistant';
+    img.style.cssText = 'width:60px;height:60px;border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,0.15);cursor:pointer;';
+    
+    // Add hover effects
+    button.onmouseover = function() { 
+        this.style.transform = 'scale(1.1)';
+        this.querySelector('img').style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)';
+    };
+    button.onmouseout = function() { 
+        this.style.transform = 'scale(1)';
+        this.querySelector('img').style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
