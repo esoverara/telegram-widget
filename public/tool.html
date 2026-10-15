@@ -1,9 +1,234 @@
-        function showSnippet(key) {
-            const domain = window.location.origin;
-            const toolUrl = domain + '/tool.html?key=' + key;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .toa-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ffffff; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toa-status-verified { color: #059669; background: #d1fae5; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .toa-status-review { color: #d97706; background: #fef3c7; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .toa-status-error { color: #dc2626; background: #fee2e2; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800 flex flex-col items-center py-10 px-4">
+
+    <div class="max-w-3xl w-full bg-white rounded-xl shadow-lg p-6 md:p-8">
+        <div class="flex items-center gap-3 mb-6 border-b pb-4">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" width="40" alt="Telegram">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Order Assistant</h1>
+                <p id="resellerName" class="text-sm text-gray-500">Loading configuration...</p>
+            </div>
+        </div>
+
+        <div id="configError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            Error loading configuration. Please check the link or contact support.
+        </div>
+
+        <div id="toolContent" class="hidden">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Paste Targets & Quantities</label>
+            <textarea id="toaInput" class="w-full h-40 p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="https://t.me/uletnaya_semya 100&#10;@juteunbot 50&#10;https://t.me/GlintTonBot?start=123 75"></textarea>
+            <p class="text-xs text-gray-500 mt-2">Format: [Telegram/MAX Link or @username] [Quantity]. One per line.</p>
             
-            const htmlSnippet = `<a href="${toolUrl}" target="_blank" style="display:inline-block; text-decoration:none;">\n  <img src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" width="45" alt="Telegram Order Assistant" style="border-radius:50%; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">\n</a>`;
-            
-            document.getElementById('snippetCode').value = `URL ONLY (If panel only accepts links):\n${toolUrl}\n\nHTML IMAGE CODE (If panel accepts HTML):\n${htmlSnippet}`;
-            document.getElementById('snippetModal').classList.remove('hidden');
+            <button id="toaAnalyze" class="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg mt-4 hover:bg-blue-700 transition">Analyze Targets</button>
+
+            <div id="toaResults" class="hidden mt-8">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600 text-xs uppercase">
+                                <th class="p-3 border-b">Target</th>
+                                <th class="p-3 border-b">Qty</th>
+                                <th class="p-3 border-b">Detected Type</th>
+                                <th class="p-3 border-b">Status</th>
+                                <th class="p-3 border-b">Service ID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="toaTableBody" class="text-sm"></tbody>
+                    </table>
+                </div>
+                <button id="toaGenerate" class="w-full bg-green-600 text-white font-semibold py-3 px-4 rounded-lg mt-6 hover:bg-green-700 transition">Generate Mass Orders</button>
+            </div>
+
+            <div id="toaOutputSection" class="hidden mt-8">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Generated Orders (Ready to Copy)</label>
+                <div id="toaOutput" class="w-full p-4 bg-gray-100 border border-gray-300 rounded-lg font-mono text-sm whitespace-pre-wrap break-all max-h-60 overflow-y-auto"></div>
+                <div id="toaWarning" class="hidden bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mt-4 text-sm"></div>
+                <div class="flex gap-3 mt-4">
+                    <button id="toaCopyAll" class="flex-1 bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 transition">Copy All to Clipboard</button>
+                    <button id="toaReset" class="flex-1 bg-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-lg hover:bg-gray-300 transition">Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const widgetKey = urlParams.get('key');
+        let resellerConfig = null;
+        let parsedRows = [];
+
+        const els = {
+            resellerName: document.getElementById('resellerName'),
+            configError: document.getElementById('configError'),
+            toolContent: document.getElementById('toolContent'),
+            input: document.getElementById('toaInput'),
+            analyzeBtn: document.getElementById('toaAnalyze'),
+            results: document.getElementById('toaResults'),
+            tableBody: document.getElementById('toaTableBody'),
+            generateBtn: document.getElementById('toaGenerate'),
+            outputSection: document.getElementById('toaOutputSection'),
+            output: document.getElementById('toaOutput'),
+            copyAllBtn: document.getElementById('toaCopyAll'),
+            resetBtn: document.getElementById('toaReset'),
+            warning: document.getElementById('toaWarning')
+        };
+
+        async function loadConfig() {
+            if (!widgetKey) {
+                els.configError.textContent = 'Missing reseller key in URL.';
+                els.configError.classList.remove('hidden');
+                return;
+            }
+            try {
+                const res = await fetch('/api/config?key=' + widgetKey);
+                if (!res.ok) throw new Error('Invalid key');
+                resellerConfig = await res.json();
+                els.resellerName.textContent = 'Powered by: ' + resellerConfig.name;
+                els.toolContent.classList.remove('hidden');
+            } catch (e) {
+                els.configError.classList.remove('hidden');
+            }
         }
+        loadConfig();
+
+        function getServiceId(type, quantity) {
+            if (!resellerConfig) return null;
+            if (type === 'TG_BOT') return resellerConfig.tg_bot_id;
+            if (type === 'TG_BOT_START') return resellerConfig.tg_bot_start_id;
+            if (type === 'TG_POST') return resellerConfig.tg_post_id;
+            if (type === 'MAX_POST') return resellerConfig.max_post_id;
+            if (type === 'MAX_CHANNEL') return resellerConfig.max_channel_id;
+            if (type === 'TG_GROUP') return resellerConfig.tg_group_id;
+            if (type === 'TG_CHANNEL') return (quantity > 100000) ? resellerConfig.tg_channel_large_id : resellerConfig.tg_channel_id;
+            return null;
+        }
+
+        els.analyzeBtn.addEventListener('click', async () => {
+            if (!resellerConfig) return;
+            els.analyzeBtn.disabled = true;
+            els.analyzeBtn.innerHTML = '<span class="toa-spinner"></span> Analyzing...';
+            els.results.classList.add('hidden');
+            els.outputSection.classList.add('hidden');
+
+            const lines = els.input.value.trim().split('\n');
+            parsedRows = [];
+            els.tableBody.innerHTML = '';
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                const lastSpace = line.lastIndexOf(' ');
+                let target, quantity, error = null;
+                if (lastSpace === -1) { target = line; quantity = null; error = 'Missing quantity'; }
+                else {
+                    target = line.substring(0, lastSpace).trim();
+                    quantity = parseInt(line.substring(lastSpace + 1).trim(), 10);
+                    if (isNaN(quantity) || quantity <= 0) error = 'Invalid quantity';
+                }
+
+                const row = { target, quantity, error, status: 'PENDING', serviceId: null, detectedType: null };
+                parsedRows.push(row);
+
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-gray-50';
+                
+                if (error) {
+                    tr.innerHTML = `<td class="p-3 break-all">${target}</td><td class="p-3">${quantity || '-'}</td><td class="p-3">-</td><td class="p-3"><span class="toa-status-error">Invalid</span></td><td class="p-3">-</td>`;
+                    row.status = 'INVALID';
+                    els.tableBody.appendChild(tr);
+                } else {
+                    tr.innerHTML = `<td class="p-3 break-all">${target}</td><td class="p-3">${quantity}</td><td class="p-3" id="type-${i}">Detecting...</td><td class="p-3" id="status-${i}"><span class="toa-spinner"></span></td><td class="p-3" id="service-${i}">-</td>`;
+                    els.tableBody.appendChild(tr);
+
+                    try {
+                        const res = await fetch('/api/detect', { 
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ target, quantity }) 
+                        });
+                        const detect = await res.json();
+                        row.detectedType = detect.type;
+                        row.status = detect.type === 'UNKNOWN' ? 'PENDING_MANUAL' : 'VERIFIED';
+                        row.serviceId = getServiceId(detect.type, quantity);
+
+                        const typeCell = document.getElementById('type-' + i);
+                        const statusCell = document.getElementById('status-' + i);
+                        const serviceCell = document.getElementById('service-' + i);
+
+                        if (detect.type !== 'UNKNOWN') {
+                            let typeLabel = detect.type.replace('TG_', 'Telegram ').replace('MAX_', 'MAX.RU ');
+                            if (detect.type === 'TG_CHANNEL' && quantity > 100000) typeLabel += ' (>100k)';
+                            typeCell.textContent = typeLabel;
+                            statusCell.innerHTML = '<span class="toa-status-verified">Verified</span>';
+                            serviceCell.textContent = row.serviceId || 'Missing Config';
+                            if (!row.serviceId) statusCell.innerHTML = '<span class="toa-status-error">No ID Configured</span>';
+                        } else {
+                            typeCell.innerHTML = `<select class="w-full p-1 border rounded text-xs" onchange="window.updateManualType(${i}, this.value)"><option value="">Select Type...</option><option value="TG_CHANNEL">Telegram Channel</option><option value="TG_GROUP">Telegram Group</option><option value="TG_BOT">Telegram Bot</option><option value="TG_BOT_START">Telegram Bot (Start)</option><option value="TG_POST">Telegram Post</option><option value="MAX_CHANNEL">MAX.RU Channel</option><option value="MAX_POST">MAX.RU Post</option></select>`;
+                            statusCell.innerHTML = '<span class="toa-status-review">Manual Review</span>';
+                            serviceCell.textContent = '-';
+                        }
+                    } catch (e) {
+                        document.getElementById('status-' + i).innerHTML = '<span class="toa-status-error">Network Error</span>';
+                    }
+                }
+            }
+
+            els.analyzeBtn.disabled = false;
+            els.analyzeBtn.textContent = 'Analyze Targets';
+            els.results.classList.remove('hidden');
+        });
+
+        window.updateManualType = function(index, type) {
+            if (!type) return;
+            const row = parsedRows[index];
+            row.detectedType = type;
+            row.status = 'MANUAL_SELECTED';
+            row.serviceId = getServiceId(type, row.quantity);
+            
+            document.getElementById('service-' + index).textContent = row.serviceId || 'Missing Config';
+            const statusCell = document.getElementById('status-' + index);
+            statusCell.innerHTML = row.serviceId ? '<span class="toa-status-verified">Manual OK</span>' : '<span class="toa-status-error">No ID Configured</span>';
+        };
+
+        els.generateBtn.addEventListener('click', () => {
+            const validRows = parsedRows.filter(r => r.serviceId && !r.error && r.status !== 'PENDING_MANUAL');
+            const invalidCount = parsedRows.length - validRows.length;
+            els.output.textContent = validRows.map(r => r.serviceId + '|' + r.target + '|' + r.quantity).join('\n');
+            if (invalidCount > 0) {
+                els.warning.textContent = 'Warning: ' + invalidCount + ' row(s) excluded due to errors or pending manual review.';
+                els.warning.classList.remove('hidden');
+            } else {
+                els.warning.classList.add('hidden');
+            }
+            els.outputSection.classList.remove('hidden');
+        });
+
+        els.copyAllBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(els.output.textContent).then(() => {
+                els.copyAllBtn.textContent = '✓ Copied!';
+                setTimeout(() => els.copyAllBtn.textContent = 'Copy All to Clipboard', 2000);
+            });
+        });
+
+        els.resetBtn.addEventListener('click', () => {
+            els.input.value = '';
+            els.results.classList.add('hidden');
+            els.outputSection.classList.add('hidden');
+            parsedRows = [];
+        });
+    </script>
+</body>
+</html>
