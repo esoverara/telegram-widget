@@ -124,8 +124,14 @@
             await fetch('/api/resellers/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
             loadResellers();
         }
-        function showSnippet(key) {
-            document.getElementById('snippetCode').value = `<script\n  src="${window.location.origin}/widget.js"\n  data-widget-key="${key}"\n><\/script>`;
+                function showSnippet(key) {
+            const domain = window.location.origin;
+            const toolUrl = domain + '/tool.html?key=' + key;
+            const imageUrl = domain + '/widget-icon.png';
+            
+            const htmlSnippet = `<a href="${toolUrl}" target="_blank" rel="noopener noreferrer" aria-label="Telegram Order Assistant" style="position: fixed; bottom: 20px; right: 20px; z-index: 99999; display: block; text-decoration: none;">\n  <img src="${imageUrl}" alt="Order Assistant" style="width: 60px; height: 60px; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">\n</a>`;
+            
+            document.getElementById('snippetCode').value = `PURE HTML CODE (Paste this into Custom HTML / Footer):\n${htmlSnippet}\n\nDIRECT LINK ONLY (If panel only has a URL box):\n${toolUrl}`;
             document.getElementById('snippetModal').classList.remove('hidden');
         }
     </script>
