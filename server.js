@@ -41,22 +41,44 @@ function generateKey() {
 
 async function detectType(target, quantity) {
     target = target.trim();
+    
+    // 1. Telegram Post Link (t.me/username/123)
     if (/^https?:\/\/t\.me\/[a-zA-Z0-9_]+\/\d+(\?.*)?$/.test(target)) return { type: 'TG_POST' };
+    
+    // 2. Telegram Bot with ?start= parameter
     if (/https?:\/\/t\.me\/.*\?start=.*/i.test(target) || /^@.*\?start=.*/i.test(target)) return { type: 'TG_BOT_START' };
+    
+    // 3. MAX.RU Post Link
     if (/https?:\/\/max\.ru\/.*_biz\//i.test(target)) return { type: 'MAX_POST' };
+    
+    // 4. MAX.RU Channel/Profile
     if (/https?:\/\/max\.ru\//i.test(target)) return { type: 'MAX_CHANNEL' };
 
-    let identifier = target.startsWith('@') ? target.substring(1).split('?')[0] : (target.match(/https?:\/\/t\.me\/([a-zA-Z0-9_]+)/) || [])[1];
+    // 5 & 6. Extract identifier for t.me links (NOW INCLUDES '+' FOR INVITE LINKS) or @usernames
+    let identifier = target.startsWith('@') 
+        ? target.substring(1).split('?')[0] 
+        : (target.match(/https?:\/\/t\.me\/([^\/\?]+)/) || [])[1];
+        
     if (!identifier) return { type: 'UNKNOWN' };
+    
+    // 7. Standard Telegram Bot (ends with 'bot')
     if (identifier.toLowerCase().endsWith('bot')) return { type: 'TG_BOT' };
 
+    // 8. Scrape t.me page for Channel vs Group (Now works for + invite links!)
     try {
-        const res = await axios.get(`https://t.me/${identifier}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 5000 });
+        const res = await axios.get(`https://t.me/${identifier}`, { 
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, 
+            timeout: 5000 
+        });
         const html = res.data.toLowerCase();
+        
         if (html.includes('subscriber')) return { type: 'TG_CHANNEL' };
         if (html.includes('member')) return { type: 'TG_GROUP' };
+        
         return { type: 'UNKNOWN' };
-    } catch (e) { return { type: 'UNKNOWN' }; }
+    } catch (e) { 
+        return { type: 'UNKNOWN' }; 
+    }
 }
 
 app.get('/api/config', (req, res) => {
