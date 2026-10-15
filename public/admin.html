@@ -124,12 +124,12 @@
             await fetch('/api/resellers/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
             loadResellers();
         }
-                       function showSnippet(key) {
+                              function showSnippet(key) {
             const domain = window.location.origin;
             const toolUrl = domain + '/tool.html?key=' + key;
             const imageUrl = domain + '/widget-icon.png';
 
-            const htmlSnippet = `<a id="toa-float-button" href="${toolUrl}" target="_blank" rel="noopener noreferrer" aria-label="Order Assistant" style="position:fixed;bottom:20px;right:20px;z-index:99999;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1c93e3;border:none!important;outline:none!important;box-shadow:none!important;text-decoration:none;transition:box-shadow .2s ease-in-out;" onmouseover="this.style.boxShadow='0 0 12px rgba(28,147,227,0.45)'" onmouseout="this.style.boxShadow='none'">\n  <img src="${imageUrl}" alt="Order Assistant" style="width:40px;height:40px;display:block;border-radius:50%;border:none!important;outline:none!important;box-shadow:none!important;padding:0!important;margin:0!important;">\n</a>`;
+            const htmlSnippet = `<a id="toa-float-button" href="${toolUrl}" target="_blank" rel="noopener noreferrer" aria-label="Order Assistant" style="position:fixed;bottom:20px;right:20px;z-index:99999;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1c93e3;border:none!important;outline:none!important;box-shadow:none!important;text-decoration:none;transition:box-shadow .2s ease-in-out;" onmouseover="this.style.boxShadow='rgb(0 56 110 / 8%) 0 0 15px 5px'" onmouseout="this.style.boxShadow='none'">\n  <img src="${imageUrl}" alt="Order Assistant" style="width:40px;height:40px;display:block;border-radius:50%;border:none!important;outline:none!important;box-shadow:none!important;padding:0!important;margin:0!important;">\n</a>`;
 
             document.getElementById('snippetCode').value = `PURE HTML CODE (Paste into Custom HTML / Footer):\n${htmlSnippet}\n\nDIRECT LINK ONLY:\n${toolUrl}`;
             document.getElementById('snippetModal').classList.remove('hidden');
