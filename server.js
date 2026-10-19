@@ -111,7 +111,7 @@ app.delete('/api/resellers/:id', requireAdmin, (req, res) => {
 });
 
 // ==========================================
-// NEW: SMART ORDER ROUTER ENDPOINT
+// SMART ORDER ROUTER ENDPOINT (Channel/Group Split)
 // ==========================================
 app.post('/api/smart-order', async (req, res) => {
     try {
@@ -126,15 +126,15 @@ app.post('/api/smart-order', async (req, res) => {
 
         const detection = await detectType(link, parseInt(quantity));
         
-        // ⚠️ IMPORTANT: Update these numbers to match your ACTUAL panel's service IDs!
-        let correctServiceId = service; 
-        if (detection.type === 'TG_CHANNEL') correctServiceId = 29;       // Change to your Channel ID
-        else if (detection.type === 'TG_GROUP') correctServiceId = 61;    // Change to your Group ID
-        else if (detection.type === 'TG_BOT') correctServiceId = 31;       // Change to your Bot ID
-        else if (detection.type === 'TG_BOT_START') correctServiceId = 39;// Change to your Bot Start ID
-        else if (detection.type === 'TG_POST') correctServiceId = 60;     // Change to your Post ID
-        else if (detection.type === 'MAX_CHANNEL') correctServiceId = 48; // Change to your MAX Channel ID
-        else if (detection.type === 'MAX_POST') correctServiceId = 49;    // Change to your MAX Post ID
+        // Simple logic: Channel → 29, Group → 61, Unknown → pass through as original (29)
+        let correctServiceId = service; // Default to original (29)
+        
+        if (detection.type === 'TG_CHANNEL') {
+            correctServiceId = 29;  // Channel ID
+        } else if (detection.type === 'TG_GROUP') {
+            correctServiceId = 61;  // Group ID
+        }
+        // If detection fails (UNKNOWN), it stays as the original service ID (29)
 
         const upstreamResponse = await axios.post(process.env.UPSTREAM_API_URL, {
             key: process.env.UPSTREAM_API_KEY,
