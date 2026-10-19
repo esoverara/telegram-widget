@@ -41,40 +41,26 @@ function generateKey() {
 
 async function detectType(target, quantity) {
     target = target.trim();
-    
-    // 1. Telegram Post Link (t.me/username/123)
     if (/^https?:\/\/t\.me\/[a-zA-Z0-9_]+\/\d+(\?.*)?$/.test(target)) return { type: 'TG_POST' };
-    
-    // 2. Telegram Bot with ?start= parameter
     if (/https?:\/\/t\.me\/.*\?start=.*/i.test(target) || /^@.*\?start=.*/i.test(target)) return { type: 'TG_BOT_START' };
-    
-    // 3. MAX.RU Post Link
     if (/https?:\/\/max\.ru\/.*_biz\//i.test(target)) return { type: 'MAX_POST' };
-    
-    // 4. MAX.RU Channel/Profile
     if (/https?:\/\/max\.ru\//i.test(target)) return { type: 'MAX_CHANNEL' };
 
-    // 5 & 6. Extract identifier for t.me links (NOW INCLUDES '+' FOR INVITE LINKS) or @usernames
     let identifier = target.startsWith('@') 
         ? target.substring(1).split('?')[0] 
         : (target.match(/https?:\/\/t\.me\/([^\/\?]+)/) || [])[1];
         
     if (!identifier) return { type: 'UNKNOWN' };
-    
-    // 7. Standard Telegram Bot (ends with 'bot')
     if (identifier.toLowerCase().endsWith('bot')) return { type: 'TG_BOT' };
 
-    // 8. Scrape t.me page for Channel vs Group (Now works for + invite links!)
     try {
         const res = await axios.get(`https://t.me/${identifier}`, { 
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, 
             timeout: 5000 
         });
         const html = res.data.toLowerCase();
-        
         if (html.includes('subscriber')) return { type: 'TG_CHANNEL' };
         if (html.includes('member')) return { type: 'TG_GROUP' };
-        
         return { type: 'UNKNOWN' };
     } catch (e) { 
         return { type: 'UNKNOWN' }; 
@@ -122,6 +108,51 @@ app.delete('/api/resellers/:id', requireAdmin, (req, res) => {
     pool.query('DELETE FROM resellers WHERE id = $1', [req.params.id])
         .then(() => res.json({ ok: true }))
         .catch(err => res.status(500).json({ error: 'DB error' }));
+});
+
+// ==========================================
+// NEW: SMART ORDER ROUTER ENDPOINT
+// ==========================================
+app.post('/api/smart-order', async (req, res) => {
+    try {
+        const { key, action, service, link, quantity } = req.body;
+
+        if (key !== process.env.ROUTER_API_KEY) {
+            return res.status(401).json({ error: 'Invalid API key' });
+        }
+        if (action !== 'add') {
+            return res.status(400).json({ error: 'Only "add" action is supported' });
+        }
+
+        const detection = await detectType(link, parseInt(quantity));
+        
+        // ⚠️ IMPORTANT: Update these numbers to match your ACTUAL panel's service IDs!
+        let correctServiceId = service; 
+        if (detection.type === 'TG_CHANNEL') correctServiceId = 1;       // Change to your Channel ID
+        else if (detection.type === 'TG_GROUP') correctServiceId = 42;    // Change to your Group ID
+        else if (detection.type === 'TG_BOT') correctServiceId = 3;       // Change to your Bot ID
+        else if (detection.type === 'TG_BOT_START') correctServiceId = 11;// Change to your Bot Start ID
+        else if (detection.type === 'TG_POST') correctServiceId = 41;     // Change to your Post ID
+        else if (detection.type === 'MAX_CHANNEL') correctServiceId = 20; // Change to your MAX Channel ID
+        else if (detection.type === 'MAX_POST') correctServiceId = 21;    // Change to your MAX Post ID
+
+        const upstreamResponse = await axios.post(process.env.UPSTREAM_API_URL, {
+            key: process.env.UPSTREAM_API_KEY,
+            action: 'add',
+            service: correctServiceId,
+            link: link,
+            quantity: quantity
+        });
+
+        res.json({
+            status: 'success',
+            order: upstreamResponse.data.order
+        });
+
+    } catch (error) {
+        console.error('Smart Order Routing Error:', error);
+        res.status(500).json({ error: 'Failed to process order' });
+    }
 });
 
 app.listen(PORT, () => console.log('✅ Server running'));
