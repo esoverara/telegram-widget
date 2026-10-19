@@ -10,11 +10,15 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+// CRITICAL FIX: This allows our server to read form-data requests from SocPanel
+app.use(express.urlencoded({ extended: true })); 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Safe SSL configuration for Neon
+const isNeon = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('neon.tech');
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('neon.tech') ? { rejectUnauthorized: false } : false
+    ssl: isNeon ? { rejectUnauthorized: false } : false
 });
 
 pool.query(`
@@ -111,13 +115,17 @@ app.delete('/api/resellers/:id', requireAdmin, (req, res) => {
 });
 
 // ==========================================
-// SMART ORDER ROUTER ENDPOINT (SocPanel Compatible)
+// SMART ORDER ROUTER ENDPOINT
 // ==========================================
 app.post('/api/smart-order', async (req, res) => {
     try {
-        const { key, action, service, link, quantity } = req.body;
+        // SocPanel might send this as form data, so we check both req.body and req.query
+        const key = req.body.key || req.query.key;
+        const action = req.body.action || req.query.action;
+        const service = req.body.service || req.query.service;
+        const link = req.body.link || req.query.link;
+        const quantity = req.body.quantity || req.query.quantity;
 
-        // 1. Verify the router key
         if (key !== process.env.ROUTER_API_KEY) {
             return res.status(401).json({ error: 'Invalid API key' });
         }
@@ -125,11 +133,9 @@ app.post('/api/smart-order', async (req, res) => {
             return res.status(400).json({ error: 'Only "add" action is supported' });
         }
 
-        // 2. Detect the link type
         const detection = await detectType(link, parseInt(quantity));
         
-        // 3. Determine correct Service ID (Channel = 29, Group = 61)
-        let correctServiceId = 29; // Default to Channel if unknown
+        let correctServiceId = 29; // Default to Channel
         
         if (detection.type === 'TG_CHANNEL') {
             correctServiceId = 29;
@@ -137,23 +143,18 @@ app.post('/api/smart-order', async (req, res) => {
             correctServiceId = 61;
         }
 
-        // 4. Format data for SocPanel's Private API (Form-encoded, NOT JSON)
-        const FormData = require('form-data'); // We'll use URLSearchParams instead, it's built-in
         const params = new URLSearchParams();
         params.append('token', process.env.UPSTREAM_API_KEY);
         params.append('service', correctServiceId);
         params.append('link', link);
         params.append('quantity', quantity);
 
-        // 5. Send the order to SocPanel
         const upstreamResponse = await axios.post(`${process.env.UPSTREAM_API_URL}/addOrder`, params, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             }
         });
 
-        // 6. Return success to the original panel
-        // SocPanel usually returns { "order": 12345 } or { "id": 12345 }
         const orderId = upstreamResponse.data.order || upstreamResponse.data.id || 'unknown';
         
         res.json({
@@ -165,4 +166,9 @@ app.post('/api/smart-order', async (req, res) => {
         console.error('Smart Order Routing Error:', error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Failed to process order' });
     }
+});
+
+console.log('🚀 About to start server on port', PORT);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log('✅ Server running and listening on port', PORT);
 });
