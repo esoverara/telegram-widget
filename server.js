@@ -111,12 +111,13 @@ app.delete('/api/resellers/:id', requireAdmin, (req, res) => {
 });
 
 // ==========================================
-// SMART ORDER ROUTER ENDPOINT (Channel/Group Split)
+// SMART ORDER ROUTER ENDPOINT (SocPanel Compatible)
 // ==========================================
 app.post('/api/smart-order', async (req, res) => {
     try {
         const { key, action, service, link, quantity } = req.body;
 
+        // 1. Verify the router key
         if (key !== process.env.ROUTER_API_KEY) {
             return res.status(401).json({ error: 'Invalid API key' });
         }
@@ -124,35 +125,44 @@ app.post('/api/smart-order', async (req, res) => {
             return res.status(400).json({ error: 'Only "add" action is supported' });
         }
 
+        // 2. Detect the link type
         const detection = await detectType(link, parseInt(quantity));
         
-        // Simple logic: Channel → 29, Group → 61, Unknown → pass through as original (29)
-        let correctServiceId = service; // Default to original (29)
+        // 3. Determine correct Service ID (Channel = 29, Group = 61)
+        let correctServiceId = 29; // Default to Channel if unknown
         
         if (detection.type === 'TG_CHANNEL') {
-            correctServiceId = 29;  // Channel ID
+            correctServiceId = 29;
         } else if (detection.type === 'TG_GROUP') {
-            correctServiceId = 61;  // Group ID
+            correctServiceId = 61;
         }
-        // If detection fails (UNKNOWN), it stays as the original service ID (29)
 
-        const upstreamResponse = await axios.post(process.env.UPSTREAM_API_URL, {
-            key: process.env.UPSTREAM_API_KEY,
-            action: 'add',
-            service: correctServiceId,
-            link: link,
-            quantity: quantity
+        // 4. Format data for SocPanel's Private API (Form-encoded, NOT JSON)
+        const FormData = require('form-data'); // We'll use URLSearchParams instead, it's built-in
+        const params = new URLSearchParams();
+        params.append('token', process.env.UPSTREAM_API_KEY);
+        params.append('service', correctServiceId);
+        params.append('link', link);
+        params.append('quantity', quantity);
+
+        // 5. Send the order to SocPanel
+        const upstreamResponse = await axios.post(`${process.env.UPSTREAM_API_URL}/addOrder`, params, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
         });
 
+        // 6. Return success to the original panel
+        // SocPanel usually returns { "order": 12345 } or { "id": 12345 }
+        const orderId = upstreamResponse.data.order || upstreamResponse.data.id || 'unknown';
+        
         res.json({
             status: 'success',
-            order: upstreamResponse.data.order
+            order: orderId
         });
 
     } catch (error) {
-        console.error('Smart Order Routing Error:', error);
+        console.error('Smart Order Routing Error:', error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Failed to process order' });
     }
 });
-
-app.listen(PORT, () => console.log('✅ Server running'));
