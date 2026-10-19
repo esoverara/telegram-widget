@@ -114,10 +114,21 @@ app.delete('/api/resellers/:id', requireAdmin, (req, res) => {
         .catch(err => res.status(500).json({ error: 'DB error' }));
 });
 // ==========================================
-// DUMMY ENDPOINT TO TRICK PANEL VALIDATION
+// DUMMY ENDPOINTS TO TRICK PANEL VALIDATION
 // ==========================================
+
+// Root endpoint - panels often check this first
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        message: 'SMM API Provider',
+        version: '2.0',
+        services: [] 
+    });
+});
+
+// Standard SMM API v2 endpoint
 app.get('/api/v2', (req, res) => {
-    // This is what panels look for to verify a provider is "real"
     res.json({ 
         status: 'success', 
         message: 'API is active',
@@ -125,10 +136,28 @@ app.get('/api/v2', (req, res) => {
     });
 });
 
+// Alternative API path
 app.get('/api', (req, res) => {
     res.json({ 
         status: 'success', 
-        message: 'API is active' 
+        message: 'API is active',
+        services: [] 
+    });
+});
+
+// Some panels check /services
+app.get('/services', (req, res) => {
+    res.json({ 
+        status: 'success',
+        services: [] 
+    });
+});
+
+// Some panels check /api/v2/services
+app.get('/api/v2/services', (req, res) => {
+    res.json({ 
+        status: 'success',
+        services: [] 
     });
 });
 // ==========================================
