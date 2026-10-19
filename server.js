@@ -10,15 +10,11 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-// CRITICAL FIX: This allows our server to read form-data requests from SocPanel
-app.use(express.urlencoded({ extended: true })); 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Safe SSL configuration for Neon
-const isNeon = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('neon.tech');
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: isNeon ? { rejectUnauthorized: false } : false
+    ssl: process.env.DATABASE_URL?.includes('neon.tech') ? { rejectUnauthorized: false } : false
 });
 
 pool.query(`
@@ -45,26 +41,40 @@ function generateKey() {
 
 async function detectType(target, quantity) {
     target = target.trim();
+    
+    // 1. Telegram Post Link (t.me/username/123)
     if (/^https?:\/\/t\.me\/[a-zA-Z0-9_]+\/\d+(\?.*)?$/.test(target)) return { type: 'TG_POST' };
+    
+    // 2. Telegram Bot with ?start= parameter
     if (/https?:\/\/t\.me\/.*\?start=.*/i.test(target) || /^@.*\?start=.*/i.test(target)) return { type: 'TG_BOT_START' };
+    
+    // 3. MAX.RU Post Link
     if (/https?:\/\/max\.ru\/.*_biz\//i.test(target)) return { type: 'MAX_POST' };
+    
+    // 4. MAX.RU Channel/Profile
     if (/https?:\/\/max\.ru\//i.test(target)) return { type: 'MAX_CHANNEL' };
 
+    // 5 & 6. Extract identifier for t.me links (NOW INCLUDES '+' FOR INVITE LINKS) or @usernames
     let identifier = target.startsWith('@') 
         ? target.substring(1).split('?')[0] 
         : (target.match(/https?:\/\/t\.me\/([^\/\?]+)/) || [])[1];
         
     if (!identifier) return { type: 'UNKNOWN' };
+    
+    // 7. Standard Telegram Bot (ends with 'bot')
     if (identifier.toLowerCase().endsWith('bot')) return { type: 'TG_BOT' };
 
+    // 8. Scrape t.me page for Channel vs Group (Now works for + invite links!)
     try {
         const res = await axios.get(`https://t.me/${identifier}`, { 
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, 
             timeout: 5000 
         });
         const html = res.data.toLowerCase();
+        
         if (html.includes('subscriber')) return { type: 'TG_CHANNEL' };
         if (html.includes('member')) return { type: 'TG_GROUP' };
+        
         return { type: 'UNKNOWN' };
     } catch (e) { 
         return { type: 'UNKNOWN' }; 
@@ -113,108 +123,5 @@ app.delete('/api/resellers/:id', requireAdmin, (req, res) => {
         .then(() => res.json({ ok: true }))
         .catch(err => res.status(500).json({ error: 'DB error' }));
 });
-// ==========================================
-// DUMMY ENDPOINTS TO TRICK PANEL VALIDATION
-// ==========================================
 
-// Root endpoint - panels often check this first
-app.get('/', (req, res) => {
-    res.json({ 
-        status: 'success', 
-        message: 'SMM API Provider',
-        version: '2.0',
-        services: [] 
-    });
-});
-
-// Standard SMM API v2 endpoint
-app.get('/api/v2', (req, res) => {
-    res.json({ 
-        status: 'success', 
-        message: 'API is active',
-        services: [] 
-    });
-});
-
-// Alternative API path
-app.get('/api', (req, res) => {
-    res.json({ 
-        status: 'success', 
-        message: 'API is active',
-        services: [] 
-    });
-});
-
-// Some panels check /services
-app.get('/services', (req, res) => {
-    res.json({ 
-        status: 'success',
-        services: [] 
-    });
-});
-
-// Some panels check /api/v2/services
-app.get('/api/v2/services', (req, res) => {
-    res.json({ 
-        status: 'success',
-        services: [] 
-    });
-});
-// ==========================================
-// SMART ORDER ROUTER ENDPOINT
-// ==========================================
-app.post('/api/smart-order', async (req, res) => {
-    try {
-        // SocPanel might send this as form data, so we check both req.body and req.query
-        const key = req.body.key || req.query.key;
-        const action = req.body.action || req.query.action;
-        const service = req.body.service || req.query.service;
-        const link = req.body.link || req.query.link;
-        const quantity = req.body.quantity || req.query.quantity;
-
-        if (key !== process.env.ROUTER_API_KEY) {
-            return res.status(401).json({ error: 'Invalid API key' });
-        }
-        if (action !== 'add') {
-            return res.status(400).json({ error: 'Only "add" action is supported' });
-        }
-
-        const detection = await detectType(link, parseInt(quantity));
-        
-        let correctServiceId = 29; // Default to Channel
-        
-        if (detection.type === 'TG_CHANNEL') {
-            correctServiceId = 29;
-        } else if (detection.type === 'TG_GROUP') {
-            correctServiceId = 61;
-        }
-
-        const params = new URLSearchParams();
-        params.append('token', process.env.UPSTREAM_API_KEY);
-        params.append('service', correctServiceId);
-        params.append('link', link);
-        params.append('quantity', quantity);
-
-        const upstreamResponse = await axios.post(`${process.env.UPSTREAM_API_URL}/addOrder`, params, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-        });
-
-        const orderId = upstreamResponse.data.order || upstreamResponse.data.id || 'unknown';
-        
-        res.json({
-            status: 'success',
-            order: orderId
-        });
-
-    } catch (error) {
-        console.error('Smart Order Routing Error:', error.response ? error.response.data : error.message);
-        res.status(500).json({ error: 'Failed to process order' });
-    }
-});
-
-console.log('🚀 About to start server on port', PORT);
-app.listen(PORT, '0.0.0.0', () => {
-    console.log('✅ Server running and listening on port', PORT);
-});
+app.listen(PORT, () => console.log('✅ Server running'));
