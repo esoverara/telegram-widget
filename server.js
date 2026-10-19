@@ -128,13 +128,13 @@ app.post('/api/smart-order', async (req, res) => {
         
         // ⚠️ IMPORTANT: Update these numbers to match your ACTUAL panel's service IDs!
         let correctServiceId = service; 
-        if (detection.type === 'TG_CHANNEL') correctServiceId = 1;       // Change to your Channel ID
-        else if (detection.type === 'TG_GROUP') correctServiceId = 42;    // Change to your Group ID
-        else if (detection.type === 'TG_BOT') correctServiceId = 3;       // Change to your Bot ID
-        else if (detection.type === 'TG_BOT_START') correctServiceId = 11;// Change to your Bot Start ID
-        else if (detection.type === 'TG_POST') correctServiceId = 41;     // Change to your Post ID
-        else if (detection.type === 'MAX_CHANNEL') correctServiceId = 20; // Change to your MAX Channel ID
-        else if (detection.type === 'MAX_POST') correctServiceId = 21;    // Change to your MAX Post ID
+        if (detection.type === 'TG_CHANNEL') correctServiceId = 29;       // Change to your Channel ID
+        else if (detection.type === 'TG_GROUP') correctServiceId = 61;    // Change to your Group ID
+        else if (detection.type === 'TG_BOT') correctServiceId = 31;       // Change to your Bot ID
+        else if (detection.type === 'TG_BOT_START') correctServiceId = 39;// Change to your Bot Start ID
+        else if (detection.type === 'TG_POST') correctServiceId = 60;     // Change to your Post ID
+        else if (detection.type === 'MAX_CHANNEL') correctServiceId = 48; // Change to your MAX Channel ID
+        else if (detection.type === 'MAX_POST') correctServiceId = 49;    // Change to your MAX Post ID
 
         const upstreamResponse = await axios.post(process.env.UPSTREAM_API_URL, {
             key: process.env.UPSTREAM_API_KEY,
